@@ -1,0 +1,165 @@
+# =======================================================
+# 1. 敏感数据与隐私凭证 (Credentials, Keys & Secrets)
+# =======================================================
+# 忽略包含真实密码与密钥的环境变量配置
+.env
+.env.local
+.env.*.local
+*.local
+docker/.env
+docker/.env.local
+
+# 允许提交配置示例模板
+!.env.example
+!**/.env.example
+# 允许前端公共界面基础配置（不含敏感密钥）
+!vibe-music-admin-main/.env
+!docker/vibe-music-admin-main/.env
+
+# 私钥、证书、凭据文件（MySQL/SSL/SSH/TLS 等）
+*.pem
+*.key
+*.crt
+*.cert
+*.pfx
+*.p12
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+
+# =======================================================
+# 2. 数据库与持久化数据 (Database & Persistence Data)
+# =======================================================
+# Docker 挂载的数据库与缓存持久化目录（含用户实际数据及内部密钥）
+data/
+docker/data/
+**/data/
+
+# Redis / SQLite / MySQL 备份与转储文件
+*.rdb
+dump.rdb
+*.dump
+*.db
+*.sqlite
+*.sqlite3
+*.ibd
+
+# =======================================================
+# 3. 构建产物与依赖目录 (Build Artifacts & Dependencies)
+# =======================================================
+# Node.js 依赖与包管理器日志
+node_modules/
+**/node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+.eslintcache
+.stylelintcache
+tsconfig.tsbuildinfo
+
+# 前端打包输出
+dist/
+**/dist/
+dist-ssr/
+
+# Java Maven 构建输出与临时字节码
+target/
+**/target/
+*.class
+*.jar
+*.war
+*.ear
+
+# =======================================================
+# 4. 日志与崩溃转储 (Logs & Crash Dumps)
+# =======================================================
+logs/
+**/logs/
+*.log
+hs_err_pid*.log
+replay_pid*.log
+
+# =======================================================
+# 5. 编辑器与 IDE 配置文件 (IDE & Editor Configs)
+# =======================================================
+.idea/
+**/.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.lingma/
+**/.lingma/
+
+# =======================================================
+# 6. 操作系统生成文件 (OS Generated Files)
+# =======================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# =======================================================
+# 7. 压缩包与大型音视频测试媒体 (Archives & Large Media Blobs)
+# =======================================================
+# 备份压缩包（避免大体积二进制包污染 Git 历史）
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# 音频、视频媒体测试文件（避免仓库膨胀）
+*.mp3
+*.flac
+*.wav
+*.aac
+*.ogg
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# =======================================================
+# 8. 临时文件 (Temporary & Backup Files)
+# =======================================================
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# =======================================================
+# 9. 个人私密文档与求职备忘 (Personal Notes, Resumes & Interview Docs)
+# =======================================================
+# 面试总结、踩坑故事、学习备忘及个人简历
+*面试*
+*学习页*
+*简历*
+*resume*
+*cheat*sheet*
+*个人*
+
+# 本地专属启动脚本（含有本地机器绝对路径）
+start-all.bat
+*.bat.local

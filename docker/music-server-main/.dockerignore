@@ -1,0 +1,42 @@
+# 编译输出
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# IDE
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+
+# 日志
+logs/
+*.log
+
+# 临时文件
+*.tmp
+*.temp
+*.swp
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# 文档
+README.md
+LICENSE
+
+# 测试
+src/test/
+
+# 其他
+.mvn/
+mvnw
+mvnw.cmd

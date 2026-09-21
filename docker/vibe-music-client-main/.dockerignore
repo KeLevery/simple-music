@@ -1,0 +1,46 @@
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 构建输出
+dist/
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 日志
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# 临时文件
+*.tmp
+*.temp
+*.swp
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# 测试
+coverage/
+
+# 其他
+*.local
+.eslintcache
+.stylelintcache

@@ -1,0 +1,60 @@
+spring:
+  # 配置数据源
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/vibe_music?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true # 修改你的 MySQL 地址和库名
+    username: root # 修改你的 MySQL 用户名
+    password: 123456 # 修改你的 MySQL 密码
+    type: com.alibaba.druid.pool.DruidDataSource # 配置连接池
+
+  # Redis 服务连接配置
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 10MB
+
+  #对于注解的 redis 缓存数据统一设置有效期为 10 分钟，单位毫秒
+  cache:
+    redis:
+      time-to-live: 600000
+
+  data:
+    redis:
+      database: 1
+      host: 127.0.0.1
+      port: 6379
+
+server:
+  port: 9080
+
+# 配置 mybatis-plus
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl # 配置日志
+    map-underscore-to-camel-case: true # 类属性与表字段的驼峰映射
+
+  global-config:
+    db-config: # 数据库配置
+      table-prefix: tb_  # 表名前缀为tb_，表名为前缀连接类名（小写）
+
+# 定义角色和路径权限的映射关系
+role-path-permissions:
+  permissions:
+    ROLE_ADMIN:
+      - "/admin/"
+    ROLE_USER:
+      - "/user/"
+      - "/playlist/"
+      - "/artist/"
+      - "/song/"
+      - "/favorite/"
+      - "/comment/"
+      - "/banner/"
+      - "/feedback/"
+
+#这里要创建一个 MinioProperties 类，用于封装 MinIO 的配置信息
+minio:
+  endpoint: http://127.0.0.1:9000
+  accessKey: minioadmin
+  secretKey: minioadmin
+  bucket: vibe-music-data

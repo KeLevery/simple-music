@@ -1,0 +1,138 @@
+# ============================================================
+# Docker Compose 配置文件
+# 作用：定义和运行多个容器（可以理解为"一键启动整个项目"）
+# 使用：docker compose up -d --build
+# ============================================================
+
+# Compose 文件格式版本
+version: '3.9'
+
+# services 下面定义的所有服务（容器），就像排班表上列出的所有岗位
+services:
+
+  # ======================== MySQL 数据库 ========================
+  # 作用：存储项目的所有数据（用户、歌曲、歌单等）
+  mysql:
+    # 使用 MySQL 8.0 官方镜像（相当于从应用商店下载 MySQL）
+    image: mysql:8.0
+    # 容器名称，方便用 docker ps 查看
+    container_name: mysql
+    # 容器挂了自动重启（除非你手动 docker stop）
+    restart: unless-stopped
+    # 从 .env 文件读取环境变量（数据库密码、用户名等）
+    env_file: .env
+    # 端口映射：左边是宿主机（你电脑）的端口，右边是容器内部端口
+    # ${MYSQL_PORT} 是 .env 中定义的端口号，默认 3306
+    # 效果：你电脑的 3306 端口 → 容器的 3306 端口
+    ports:
+      - "${MYSQL_PORT}:3306"
+    # 数据卷映射：左边是你电脑的路径，右边是容器内路径
+    # 作用：把数据库文件存到宿主机上，容器删了数据不会丢
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    # 启动参数：使用原生密码认证插件（兼容老客户端）
+    command: --default-authentication-plugin=mysql_native_password
+    # 健康检查：定期检测 MySQL 是否正常运行
+    # 其他服务可以通过 depends_on + condition: service_healthy 等它就绪后再启动
+    healthcheck:
+      # 用 mysqladmin ping 命令检测 MySQL 是否能响应
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      # 每 10 秒检查一次
+      interval: 10s
+      # 超时时间 5 秒（5 秒内没响应就算失败）
+      timeout: 5s
+      # 连续失败 5 次才认为不健康
+      retries: 5
+
+  # ======================== Redis 缓存 ========================
+  # 作用：高速缓存，存储登录状态、热点数据等，减轻数据库压力
+  redis:
+    # 使用 Redis 7 的精简版镜像（alpine 体积小）
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    # 端口映射：你电脑的 6379 → 容器的 6379
+    ports:
+      - "${REDIS_PORT}:6379"
+    # 数据持久化：把 Redis 数据存到宿主机，防止容器重启丢数据
+    volumes:
+      - ./data/redis:/data
+    # 启动参数：设置密码（${REDIS_PASSWORD} 来自 .env 文件）
+    # 如果密码为空则不设置 --requirepass
+    command: redis-server
+
+  # ======================== Spring Boot 后端 ========================
+  # 作用：项目的核心服务，处理业务逻辑、API 请求
+  backend:
+    # 构建配置：不用现成镜像，而是根据 Dockerfile 自己构建
+    build:
+      # Dockerfile 所在的目录（构建时的上下文路径）
+      context: ./music-server-main
+      # Dockerfile 文件名
+      dockerfile: Dockerfile
+    container_name: backend
+    restart: unless-stopped
+    # 端口映射：你电脑的 8080 → 容器的 8080（Spring Boot 默认端口）
+    ports:
+      - "${BACKEND_PORT}:8080"
+    # 加载 .env 中的通用环境变量
+    env_file: .env
+    # 额外的环境变量，会覆盖 .env 中的同名变量
+    # 这里主要把数据库和 Redis 的地址指向 Docker 内部网络的服务名
+    environment:
+      # 数据库连接地址：mysql 是上面 MySQL 服务的名称
+      # Docker 内部 DNS 会自动把 "mysql" 解析为 MySQL 容器的 IP
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      # Redis 地址：redis 是上面 Redis 服务的名称
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD}
+      # MinIO 对象存储地址（存储音乐文件、图片等）
+      # host.docker.internal 代表宿主机，即你电脑的地址
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESSKEY=${MINIO_ROOT_USER}
+      - MINIO_SECRETKEY=${MINIO_ROOT_PASSWORD}
+    # 依赖关系：后端需要等 MySQL 和 Redis 启动好才能运行
+    depends_on:
+      # MySQL 必须是 healthy 状态（健康检查通过）才算就绪
+      mysql:
+        condition: service_healthy
+      # Redis 只要是 started 状态就行（Redis 没有 healthcheck）
+      redis:
+        condition: service_started
+
+  # ======================== 管理端前端（Admin） ========================
+  # 作用：管理员使用的后台界面，管理歌曲、用户、系统配置等
+  admin:
+    # 从 ./vibe-music-admin-main/Dockerfile 构建
+    build:
+      context: ./vibe-music-admin-main
+      dockerfile: Dockerfile
+    container_name: admin
+    restart: unless-stopped
+    # 端口映射：你电脑的 3000 → 容器的 80（Nginx 默认端口）
+    # 访问 http://localhost:3000 即可打开管理端
+    ports:
+      - "${ADMIN_PORT}:80"
+    # 依赖后端，因为前端需要调用后端 API
+    depends_on:
+      - backend
+
+  # ======================== 客户端前端（Client） ========================
+  # 作用：普通用户使用的音乐播放界面，听歌、搜歌、歌单等
+  client:
+    # 从 ./vibe-music-client-main/Dockerfile 构建
+    build:
+      context: ./vibe-music-client-main
+      dockerfile: Dockerfile
+    container_name: client
+    restart: unless-stopped
+    # 端口映射：你电脑的 3001 → 容器的 80（Nginx 默认端口）
+    # 访问 http://localhost:3001 即可打开客户端
+    ports:
+      - "${CLIENT_PORT}:80"
+    # 依赖后端，因为前端需要调用后端 API
+    depends_on:
+      - backend

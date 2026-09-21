@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.simple.mapper.PlaylistMapper">
+
+    <!-- 获取用户收藏歌单的风格 -->
+    <select id="getFavoritePlaylistStyles" resultType="java.lang.String">
+        SELECT style
+        FROM tb_playlist
+        WHERE id IN
+        <foreach item="id" collection="favoritePlaylistIds" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <!-- 根据风格推荐歌单（排除已收藏歌单） -->
+    <select id="getRecommendedPlaylistsByStyles" resultType="com.simple.model.vo.PlaylistVO">
+        SELECT *
+        FROM tb_playlist
+        WHERE style IN
+        <foreach item="style" collection="sortedStyleIds" open="(" separator="," close=")">
+            #{style}
+        </foreach>
+        AND id NOT IN
+        <foreach item="id" collection="favoritePlaylistIds" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        ORDER BY RAND()
+        LIMIT #{limit}
+    </select>
+
+
+</mapper>

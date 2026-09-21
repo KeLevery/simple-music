@@ -1,0 +1,23 @@
+# 国内镜像源版本 Dockerfile - 使用本地预构建方式
+
+# 方案：先在本地构建好 dist，然后只复制到镜像中
+# 如果本地没有 dist，则尝试在容器中构建
+
+FROM docker.m.daocloud.io/library/nginx:alpine
+
+WORKDIR /usr/share/nginx/html
+
+# 删除Nginx默认的静态文件
+RUN rm -rf ./*
+
+# 复制预构建好的 dist 目录（需要在构建前本地执行 pnpm build）
+COPY dist .
+
+# 复制自定义Nginx配置
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# 暴露80端口
+EXPOSE 80
+
+# 启动Nginx
+CMD ["nginx", "-g", "daemon off;"]
