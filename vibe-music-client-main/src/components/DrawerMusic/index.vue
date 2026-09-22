@@ -1,18 +1,31 @@
 <script setup lang="ts">
 import Left from './left.vue'
 import Right from './right.vue'
+import KeyboardShortcutsModal from './components/KeyboardShortcutsModal.vue'
 import { useDark, useToggle } from '@vueuse/core'
 import { useDateFormat, useNow } from '@vueuse/core'
-import { getSongDetail } from '@/api/system'
+import { getSongDetail, collectSong, cancelCollectSong } from '@/api/system'
 import type { SongDetail } from '@/api/interface'
-import { ref, provide } from 'vue'
+import { ref, provide, watch, onMounted, onUnmounted } from 'vue'
 import { useAudioPlayer } from '@/hooks/useAudioPlayer'
 import { themeStore } from '@/stores/modules/theme'
+import { AudioStore } from '@/stores/modules/audio'
+import { UserStore } from '@/stores/modules/user'
+import { Icon } from '@iconify/vue'
+import { ElMessage } from 'element-plus'
 
 const formatted = useDateFormat(useNow(), 'HH:mm:ss')
 const theme = themeStore()
+const audioStore = AudioStore()
+const userStore = UserStore()
 const showDrawer = defineModel<boolean>()
 const songDetail = ref<SongDetail | null>(null)
+
+// 快捷键帮助弹窗
+const showShortcutsModal = ref(false)
+
+// 全屏状态
+const isFullscreen = ref(false)
 
 const isDark = useDark({
   selector: 'html',
@@ -25,89 +38,286 @@ const toggleMode = () => {
   theme.setDark(!isDark.value)
   toggleDark()
 }
-const { currentTrack } = useAudioPlayer()
+
+const {
+  currentTrack,
+  isPlaying,
+  currentTime,
+  duration,
+  volume,
+  togglePlayPause,
+  seek,
+  setVolume,
+  nextTrack,
+  prevTrack,
+} = useAudioPlayer()
 
 // 监听 currentTrack 的变化，获取歌曲详情
-watch(() => currentTrack.value.id, async (newId) => {
-  if (newId) {
-    try {
-      const res = await getSongDetail(Number(newId))
-      if (res.code === 0 && res.data) {
-        // 确保返回的数据符合 SongDetail 接口
-        const songData = res.data as unknown as SongDetail
-        if (
-          'songId' in songData &&
-          'songName' in songData &&
-          'artistName' in songData &&
-          'album' in songData
-        ) {
-          songDetail.value = songData
-        } else {
-          console.error('歌曲详情数据格式不正确')
+watch(
+  () => currentTrack.value.id,
+  async (newId) => {
+    if (newId) {
+      try {
+        const res = await getSongDetail(Number(newId))
+        if (res.code === 0 && res.data) {
+          const songData = res.data as unknown as SongDetail
+          if (
+            'songId' in songData &&
+            'songName' in songData &&
+            'artistName' in songData &&
+            'album' in songData
+          ) {
+            songDetail.value = songData
+          }
         }
+      } catch (error) {
+        console.error('获取歌曲详情失败:', error)
       }
-    } catch (error) {
-      console.error('获取歌曲详情失败:', error)
+    }
+  },
+  { immediate: true }
+)
+
+// 全屏切换
+const toggleFullscreen = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().then(() => {
+      isFullscreen.value = true
+    }).catch(() => {})
+  } else {
+    if (document.exitFullscreen) {
+      document.exitFullscreen().then(() => {
+        isFullscreen.value = false
+      }).catch(() => {})
     }
   }
-}, { immediate: true })
+}
+
+// 快捷喜欢/取消喜欢
+const handleQuickLike = async () => {
+  if (!userStore.isLoggedIn) {
+    ElMessage.warning('请先登录')
+    return
+  }
+  const track = audioStore.trackList[audioStore.currentSongIndex]
+  if (!track) return
+  const songId = Number(track.id)
+  const currentStatus = track.likeStatus || 0
+  try {
+    if (currentStatus === 0) {
+      const res = await collectSong(songId)
+      if (res.code === 0) {
+        track.likeStatus = 1
+        ElMessage.success('已添加到我的喜欢')
+      }
+    } else {
+      const res = await cancelCollectSong(songId)
+      if (res.code === 0) {
+        track.likeStatus = 0
+        ElMessage.success('已取消喜欢')
+      }
+    }
+  } catch (e) {}
+}
+
+// 全局播放器快捷键
+const onKeydown = (e: KeyboardEvent) => {
+  if (!showDrawer.value) return
+
+  // 如果在输入框或文本域中输入，不触发播放器全局快捷键
+  const target = e.target as HTMLElement
+  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+    return
+  }
+
+  switch (e.code) {
+    case 'Space':
+      e.preventDefault()
+      togglePlayPause()
+      break
+    case 'Escape':
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {})
+        isFullscreen.value = false
+      } else {
+        showDrawer.value = false
+      }
+      break
+    case 'ArrowLeft':
+      e.preventDefault()
+      seek(Math.max(0, currentTime.value - 5))
+      break
+    case 'ArrowRight':
+      e.preventDefault()
+      seek(Math.min(duration.value, currentTime.value + 5))
+      break
+    case 'ArrowUp':
+      e.preventDefault()
+      setVolume(Math.min(100, (volume.value || 0) + 5))
+      break
+    case 'ArrowDown':
+      e.preventDefault()
+      setVolume(Math.max(0, (volume.value || 0) - 5))
+      break
+    case 'KeyM':
+      e.preventDefault()
+      setVolume(volume.value === 0 ? 50 : 0)
+      break
+    case 'KeyF':
+      e.preventDefault()
+      toggleFullscreen()
+      break
+    case 'KeyL':
+      e.preventDefault()
+      handleQuickLike()
+      break
+    case 'KeyN':
+      e.preventDefault()
+      nextTrack()
+      break
+    case 'KeyP':
+      e.preventDefault()
+      prevTrack()
+      break
+  }
+}
+
+const onFullscreenChange = () => {
+  isFullscreen.value = !!document.fullscreenElement
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+})
 
 // 提供 songDetail 给子组件
 provide('songDetail', songDetail)
 </script>
+
 <template>
-  <el-drawer :style="{
-    '--track-cover-url': `url(${currentTrack.cover})`,
-  }" v-model="showDrawer" direction="btt" size="100%" :modal="false" :showClose="false"
-    class="drawer-bg backdrop-filter backdrop-blur-md">
-    <template #header>
-      <div class="flex items-center justify-between">
-        <div class="flex items-center justify-center gap-2 text-primary-foreground">
-          <el-button text circle @click="showDrawer = false">
-            <icon-uiw:down />
-          </el-button>
+  <el-drawer
+    v-model="showDrawer"
+    direction="btt"
+    size="100%"
+    :modal="false"
+    :show-close="false"
+    :with-header="false"
+    class="drawer-clean-theme-wrapper"
+  >
+    <!-- 主体视听容器 -->
+    <div class="w-full h-full flex flex-col overflow-hidden select-none relative bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+      <!-- 动态自适应环境柔光背景层 (Ambient Blur Background) -->
+      <div
+        class="absolute inset-0 pointer-events-none opacity-25 dark:opacity-15 filter blur-[90px] scale-125 transition-all duration-1000 bg-center bg-no-repeat bg-cover"
+        :style="{
+          backgroundImage: `url(${songDetail?.coverUrl || currentTrack.cover})`
+        }"
+      ></div>
+
+      <!-- 顶栏导航 -->
+      <header class="flex items-center justify-between px-6 lg:px-10 py-3 shrink-0 border-b border-slate-200/70 dark:border-slate-800/80 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md z-20">
+        <!-- 左侧：收起按钮与正在播放简标 -->
+        <div class="flex items-center gap-3">
+          <button
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer"
+            @click="showDrawer = false"
+            title="收起播放页面 (ESC)"
+          >
+            <Icon icon="solar:arrow-down-linear" class="text-sm" />
+            <span>收起</span>
+            <kbd class="hidden sm:inline-block text-[10px] font-mono px-1 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400">ESC</kbd>
+          </button>
+
+          <div class="hidden sm:flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 border-l border-slate-200 dark:border-slate-800 pl-3">
+            <span class="font-medium text-slate-700 dark:text-slate-300">正在播放</span>
+            <span>·</span>
+            <span class="truncate max-w-[240px] text-slate-500 dark:text-slate-400">{{ songDetail?.songName || currentTrack.title }}</span>
+          </div>
         </div>
-        <div class="flex items-center gap-1">
-          <icon-meteor-icons:clock />
-          <span class="text-base"> {{ formatted }} </span>
+
+        <!-- 右侧：快捷键指南、沉浸全屏、时钟、主题切换与关闭 -->
+        <div class="flex items-center gap-2.5">
+          <!-- 快捷键指南 -->
+          <button
+            @click="showShortcutsModal = true"
+            class="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer"
+            title="快捷键指南"
+          >
+            <Icon icon="solar:keyboard-linear" class="text-base" />
+          </button>
+
+          <!-- 全屏沉浸切换 -->
+          <button
+            @click="toggleFullscreen"
+            class="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer"
+            :title="isFullscreen ? '退出全屏 (F)' : '全屏沉浸 (F)'"
+          >
+            <Icon :icon="isFullscreen ? 'solar:quit-full-screen-linear' : 'solar:full-screen-linear'" class="text-base" />
+          </button>
+
+          <!-- 实时时钟 -->
+          <div class="hidden md:flex items-center gap-1.5 text-xs font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+            <Icon icon="solar:clock-circle-linear" class="text-sm text-primary" />
+            <span>{{ formatted }}</span>
+          </div>
+
+          <!-- 主题切换 -->
+          <button
+            @click="toggleMode"
+            class="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer"
+            :title="isDark ? '切换至浅色模式' : '切换至暗黑模式'"
+          >
+            <Icon :icon="isDark ? 'solar:moon-linear' : 'solar:sun-2-linear'" class="text-base" />
+          </button>
+
+          <!-- 关闭 -->
+          <button
+            @click="showDrawer = false"
+            class="p-2 rounded-lg bg-slate-100 hover:bg-red-50 hover:text-red-600 dark:bg-slate-800 dark:hover:bg-red-950/40 dark:hover:text-red-400 text-slate-600 dark:text-slate-300 transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer"
+            title="关闭"
+          >
+            <Icon icon="solar:close-circle-linear" class="text-base" />
+          </button>
         </div>
-      </div>
-    </template>
-    <main class="flex h-full">
-      <div class="flex w-full flex-1">
-        <div class="w-1/2">
+      </header>
+
+      <!-- 主体双栏布局 -->
+      <main class="flex-1 min-h-0 w-full flex flex-col lg:flex-row p-4 lg:p-6 gap-6 overflow-hidden relative z-10">
+        <!-- 左侧：黑胶/画报与控制区 -->
+        <section class="w-full lg:w-[46%] h-full flex flex-col justify-center items-center overflow-y-auto lg:overflow-visible">
           <Left />
-        </div>
-        <div class="w-1/2 relative">
+        </section>
+
+        <!-- 右侧：歌词与评论卡片 -->
+        <section class="w-full lg:w-[54%] h-full flex flex-col min-h-0">
           <Right />
-        </div>
-      </div>
-    </main>
-    <template #footer>
-      <div class="flex justify-end gap-2">
-        <el-switch v-model="theme.isDark" @change="toggleMode" active-text="暗黑模式" />
-      </div>
-    </template>
+        </section>
+      </main>
+    </div>
+
+    <!-- 快捷键指南弹窗 -->
+    <KeyboardShortcutsModal v-model="showShortcutsModal" />
   </el-drawer>
 </template>
 
-<style scoped>
-.drawer-bg {
-  background-image: var(--track-cover-url);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+<style>
+.drawer-clean-theme-wrapper.el-drawer {
+  background: #f8fafc !important;
+  box-shadow: none !important;
 }
 
-.drawer-bg::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(20px);
-  z-index: -1;
+.dark .drawer-clean-theme-wrapper.el-drawer {
+  background: #020617 !important;
+}
+
+.drawer-clean-theme-wrapper .el-drawer__body {
+  padding: 0 !important;
+  overflow: hidden !important;
 }
 </style>

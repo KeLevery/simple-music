@@ -82,6 +82,7 @@ instance.interceptors.response.use(
           ElMessage.error('没有权限')
           break
         case 404:
+          console.warn('[HTTP 404 未找到资源]', error.config?.url)
           ElMessage.error('请求的资源不存在')
           break
         case 500:

@@ -38,7 +38,7 @@ export const useFavoriteStore = defineStore('favorite', {
           }
         }
       } catch (error) {
-        ElMessage.error('获取收藏歌单失败')
+        console.warn('获取收藏歌单暂无数据或服务未响应:', error)
       } finally {
         this.loading = false
       }

@@ -9,7 +9,10 @@ interface AudioPlayer {
   currentTime: Ref<number>
   duration: Ref<number>
   volume: Ref<number>
-  //   currentLyricIndex: Ref<number>
+  isLoading: Ref<boolean>
+  isBuffering: Ref<boolean>
+  bufferedPercent: Ref<number>
+  networkError: Ref<string | null>
   audioElement: Ref<HTMLAudioElement | null>
   play: () => void
   pause: () => void
@@ -20,6 +23,7 @@ interface AudioPlayer {
   setVolume: (volume: number) => void
   setPlayMode: (mode: PlayMode) => void
   loadTrack: () => Promise<void>
+  reloadAudio: () => Promise<void>
 }
 
 export const AudioPlayer = () => {
@@ -28,6 +32,12 @@ export const AudioPlayer = () => {
   const isPlaying = ref(false)
   const volume = ref()
   const playMode = ref<PlayMode>('order') // 默认为顺序播放
+
+  // 音频网络与加载状态
+  const isLoading = ref(false)
+  const isBuffering = ref(false)
+  const bufferedPercent = ref(0)
+  const networkError = ref<string | null>(null)
 
   // 当前播放的歌曲
   const currentTrack = computed<trackModel>(
@@ -138,12 +148,22 @@ export const AudioPlayer = () => {
     play()
   }
 
+  // 重新尝试加载当前歌曲
+  const reloadAudio = async () => {
+    networkError.value = null
+    await loadTrack()
+    play()
+  }
+
   // 加载当前歌曲
   const loadTrack = async () => {
+    isLoading.value = true
+    isBuffering.value = true
+    networkError.value = null
+    bufferedPercent.value = 0
+
     // 检查歌曲 URL
     await checkUrl()
-    // 歌词是否存在
-    // checkLyrics()
 
     if (audioElement.value) {
       audioElement.value.src = currentTrack.value.url
@@ -155,44 +175,54 @@ export const AudioPlayer = () => {
   const checkUrl = async () => {
     // 查看歌曲 URL 是否存在
     if (!currentTrack.value.url) {
-      // 如果 currentTrack 的 url 不存在，则获取 URL
-      const response = await urlV1(currentTrack.value.id)
-      const url = response.data[0]?.url // 获取第一个 URL
+      if (!currentTrack.value.id) {
+        isLoading.value = false
+        isBuffering.value = false
+        return
+      }
+      // 如果 currentTrack 的 url 不存在，则尝试获取 URL
+      try {
+        const response = await urlV1(currentTrack.value.id)
+        const url = response.data?.[0]?.url // 获取第一个 URL
 
-      if (!url) return
-      // 更新 trackList 中的对应歌曲的 url
-      const trackIndex = audioStore.trackList.findIndex(
-        (track: { id: any }) => track.id === currentTrack.value.id
-      )
-      if (trackIndex !== -1) {
-        audioStore.trackList[trackIndex].url = url // 更新 URL
+        if (!url) {
+          networkError.value = '未获取到歌曲音频播放地址'
+          isLoading.value = false
+          isBuffering.value = false
+          return
+        }
+        // 更新 trackList 中的对应歌曲的 url
+        const trackIndex = audioStore.trackList.findIndex(
+          (track: { id: any }) => track.id === currentTrack.value.id
+        )
+        if (trackIndex !== -1) {
+          audioStore.trackList[trackIndex].url = url // 更新 URL
+        }
+      } catch (e) {
+        console.warn('获取音频直链失败或无需获取:', e)
       }
     }
     return Promise.resolve()
   }
 
-  // 解析歌词数据
-  //   const checkLyrics = () => {
-  //     // 查看歌词是否存在
-  //     if (!currentTrack.value.lyrics) {
-  //       // 如果 currentTrack 的 lyrics 不存在，则获取歌词
-  //       lyricNew(currentTrack.value.id).then((response) => {
-  //         // 更新 trackList 中的对应歌曲的 url
-  //         const trackIndex = audioStore.trackList.findIndex(
-  //           (track: { id: any }) => track.id === currentTrack.value.id
-  //         )
-  //         if (trackIndex !== -1) {
-  //           audioStore.trackList[trackIndex].lyrics =
-  //             parseAndMergeLyrics(response) // 更新 URL
-  //         }
-  //       })
-  //     }
-  //   }
+  // 更新已缓冲进度
+  const onProgress = () => {
+    if (audioElement.value && audioElement.value.buffered.length > 0 && duration.value > 0) {
+      try {
+        const bufferedEnd = audioElement.value.buffered.end(audioElement.value.buffered.length - 1)
+        const percent = Math.min(100, Math.round((bufferedEnd / duration.value) * 100))
+        bufferedPercent.value = percent
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
 
   // 更新当前播放时间
   const updateTime = () => {
     if (audioElement.value) {
       currentTime.value = audioElement.value.currentTime
+      onProgress()
     }
   }
 
@@ -200,7 +230,45 @@ export const AudioPlayer = () => {
   const onLoadedMetadata = () => {
     if (audioElement.value) {
       duration.value = audioElement.value.duration
+      isLoading.value = false
+      isBuffering.value = false
+      networkError.value = null
     }
+  }
+
+  const onLoadStart = () => {
+    isLoading.value = true
+    isBuffering.value = true
+    networkError.value = null
+  }
+
+  const onCanPlay = () => {
+    isLoading.value = false
+    isBuffering.value = false
+  }
+
+  const onWaiting = () => {
+    isBuffering.value = true
+  }
+
+  const onPlaying = () => {
+    isLoading.value = false
+    isBuffering.value = false
+    isPlaying.value = true
+  }
+
+  const onError = (e: Event) => {
+    isLoading.value = false
+    isBuffering.value = false
+    isPlaying.value = false
+    const err = audioElement.value?.error
+    let msg = '音频加载失败'
+    if (err) {
+      if (err.code === 2) msg = '网络连接异常，音频加载中断'
+      else if (err.code === 3) msg = '音频数据解码失败'
+      else if (err.code === 4) msg = '音频资源链接不可用或格式不受支持'
+    }
+    networkError.value = msg
   }
 
   // 切换播放/暂停状态
@@ -237,30 +305,36 @@ export const AudioPlayer = () => {
     })
   }
 
-  //   // 更新currentLyricIndex
-  //   watch(currentTime, (newTime) => {
-  //     updateCurrentLyricIndex(newTime)
-  //   })
-
   // 组件挂载时初始化音频元素
   onMounted(() => {
     audioElement.value = new Audio(currentTrack.value.url)
     volume.value = audioStore.volume || 50
     audioElement.value.volume = volume.value / 100
-    // 歌词是否存在
-    // checkLyrics()
+
     // 添加事件监听器
+    audioElement.value.addEventListener('loadstart', onLoadStart)
+    audioElement.value.addEventListener('loadedmetadata', onLoadedMetadata)
+    audioElement.value.addEventListener('canplay', onCanPlay)
+    audioElement.value.addEventListener('waiting', onWaiting)
+    audioElement.value.addEventListener('playing', onPlaying)
+    audioElement.value.addEventListener('progress', onProgress)
     audioElement.value.addEventListener('timeupdate', updateTime)
     audioElement.value.addEventListener('ended', nextTrack)
-    audioElement.value.addEventListener('loadedmetadata', onLoadedMetadata)
+    audioElement.value.addEventListener('error', onError)
   })
 
   // 组件卸载时移除事件监听器
   onUnmounted(() => {
     if (audioElement.value) {
+      audioElement.value.removeEventListener('loadstart', onLoadStart)
+      audioElement.value.removeEventListener('loadedmetadata', onLoadedMetadata)
+      audioElement.value.removeEventListener('canplay', onCanPlay)
+      audioElement.value.removeEventListener('waiting', onWaiting)
+      audioElement.value.removeEventListener('playing', onPlaying)
+      audioElement.value.removeEventListener('progress', onProgress)
       audioElement.value.removeEventListener('timeupdate', updateTime)
       audioElement.value.removeEventListener('ended', nextTrack)
-      audioElement.value.removeEventListener('loadedmetadata', onLoadedMetadata)
+      audioElement.value.removeEventListener('error', onError)
     }
   })
 
@@ -270,7 +344,10 @@ export const AudioPlayer = () => {
     currentTime,
     duration,
     volume,
-    // currentLyricIndex,
+    isLoading,
+    isBuffering,
+    bufferedPercent,
+    networkError,
     audioElement,
     play,
     pause,
@@ -281,6 +358,7 @@ export const AudioPlayer = () => {
     setVolume,
     setPlayMode,
     loadTrack,
+    reloadAudio,
   }
 
   return audioPlayer

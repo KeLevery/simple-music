@@ -20,6 +20,10 @@ const {
   isPlaying,
   currentTime,
   duration,
+  isLoading,
+  isBuffering,
+  bufferedPercent,
+  networkError,
   nextTrack,
   prevTrack,
   togglePlayPause,
@@ -124,14 +128,24 @@ const handleLike = async () => {
       <button
         @click="prevTrack"
         class="p-2 rounded-full hover:bg-hoverMenuBg transition"
+        title="上一首"
       >
         <icon-solar:skip-previous-bold class="text-lg" />
       </button>
+
       <button
         @click="togglePlayPause"
-        class="p-2 rounded-full hover:bg-hoverMenuBg transition"
+        class="p-2 rounded-full hover:bg-hoverMenuBg transition relative"
+        title="播放/暂停"
       >
         <Icon
+          v-if="isBuffering"
+          icon="ri:loader-2-line"
+          class="text-4xl animate-spin"
+          :color="'#2a68fa'"
+        />
+        <Icon
+          v-else
           :icon="
             isPlaying ? 'ic:round-pause-circle' : 'material-symbols:play-circle'
           "
@@ -139,30 +153,48 @@ const handleLike = async () => {
           :color="'#2a68fa'"
         />
       </button>
+
       <button
         @click="nextTrack"
         class="p-2 rounded-full hover:bg-hoverMenuBg transition"
+        title="下一首"
       >
         <icon-solar:skip-previous-bold class="transform scale-x-[-1] text-lg" />
       </button>
+
       <button class="p-2 rounded-full hover:bg-hoverMenuBg transition" @click="handleLike">
         <icon-mdi:cards-heart-outline v-if="currentSongLikeStatus === 0" class="text-lg" />
         <icon-mdi:cards-heart v-else class="text-lg text-red-500" />
       </button>
     </div>
+
+    <!-- 进度条区（支持双轨网络已缓冲背景条） -->
     <div class="w-full flex items-center space-x-2">
-      <el-slider
-        v-model="currentTime"
-        :step="1"
-        :show-tooltip="false"
-        @change="seek"
-        :max="duration"
-        class="w-full"
-        size="small"
-      />
-      <span class="text-xs">{{ formatTime(currentTime) }}</span>
-      <span> / </span>
-      <span class="text-xs">{{ formatTime(duration) }}</span>
+      <div class="relative w-full flex items-center">
+        <!-- 灰色已缓冲底轨 -->
+        <div class="absolute left-0 right-0 h-1 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden pointer-events-none">
+          <div
+            class="h-full bg-black/20 dark:bg-white/25 rounded-full transition-all duration-300"
+            :style="{ width: `${bufferedPercent}%` }"
+          ></div>
+        </div>
+
+        <el-slider
+          v-model="currentTime"
+          :step="1"
+          :show-tooltip="false"
+          @change="seek"
+          :max="duration"
+          class="w-full relative z-10"
+          size="small"
+        />
+      </div>
+
+      <div class="text-xs text-muted-foreground whitespace-nowrap flex items-center font-mono gap-1">
+        <span>{{ formatTime(currentTime) }}</span>
+        <span>/</span>
+        <span>{{ formatTime(duration) }}</span>
+      </div>
     </div>
   </div>
 </template>

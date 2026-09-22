@@ -163,3 +163,11 @@ $RECYCLE.BIN/
 # 本地专属启动脚本（含有本地机器绝对路径）
 start-all.bat
 *.bat.local
+
+# =======================================================
+# 10. 本地 Agent 与 Bridge 辅助工具 (Local Agent Tools & Bridge)
+# =======================================================
+antigravity-bridge/
+.agents/
+.bridge/
+**/.bridge/

@@ -1,14 +1,21 @@
 <script setup lang="ts">
 import type { SongDetail } from '@/api/interface'
 import { ref, inject, type Ref, computed } from 'vue'
-import { formatNumber } from '@/utils'
+import { formatNumber, formatTime } from '@/utils'
 import coverImg from '@/assets/cover.png'
 import { likeComment, addSongComment, getSongDetail, deleteComment } from '@/api/system'
 import { ElMessage } from 'element-plus'
 import { UserStore } from '@/stores/modules/user'
+import { useAudioPlayer } from '@/hooks/useAudioPlayer'
+import LyricView from './LyricView.vue'
+import { Icon } from '@iconify/vue'
 
 const songDetail = inject<Ref<SongDetail | null>>('songDetail')
 const userStore = UserStore()
+const { currentTrack, duration } = useAudioPlayer()
+
+// Tab 切换：歌词 (lyrics) 与 评论 (comments) 与 歌曲档案 (info)
+const activeTab = ref<'lyrics' | 'comments' | 'info'>('lyrics')
 
 // 获取当前用户名
 const currentUsername = computed(() => userStore.userInfo?.username || '')
@@ -34,17 +41,17 @@ const handleComment = async () => {
     ElMessage.warning('请输入评论内容')
     return
   }
-  
+
   try {
     const songId = songDetail.value?.songId
     if (!songId) return
-    
+
     const content = commentContent.value.trim()
     const res = await addSongComment({
       songId,
-      content
+      content,
     })
-    
+
     if (res.code === 0) {
       ElMessage.success('评论发布成功')
       commentContent.value = ''
@@ -62,10 +69,11 @@ const handleComment = async () => {
 }
 
 const formatDate = (date: string) => {
+  if (!date) return '未知'
   return new Date(date).toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: 'long',
-    day: 'numeric'
+    day: 'numeric',
   })
 }
 
@@ -77,27 +85,24 @@ const handleLike = async (comment: any) => {
   }
 
   try {
-    // 调用点赞接口
     const res = await likeComment(comment.commentId)
     if (res.code === 0) {
-      // 更新评论的点赞数量
       if (songDetail.value && songDetail.value.comments) {
-        const updatedComments = songDetail.value.comments.map(item => {
+        const updatedComments = songDetail.value.comments.map((item) => {
           if (item.commentId === comment.commentId) {
             return {
               ...item,
-              likeCount: item.likeCount + 1
+              likeCount: item.likeCount + 1,
             }
           }
           return item
         })
-        
+
         songDetail.value = {
           ...songDetail.value,
-          comments: updatedComments
+          comments: updatedComments,
         }
       }
-
       ElMessage.success('点赞成功')
     }
   } catch (error) {
@@ -111,7 +116,6 @@ const handleDelete = async (comment: any) => {
     const res = await deleteComment(comment.commentId)
     if (res.code === 0) {
       ElMessage.success('删除成功')
-      // 重新获取歌曲详情以更新评论列表
       const songId = songDetail.value?.songId
       if (songId) {
         const detailRes = await getSongDetail(songId)
@@ -129,109 +133,225 @@ const handleDelete = async (comment: any) => {
 </script>
 
 <template>
-  <div class="h-full p-6 overflow-y-auto mr-16">
-    <div v-if="songDetail" class="space-y-6">
-      <!-- 歌曲信息 -->
-      <div class="space-y-2">
-        <h3 class="text-xl font-semibold text-primary-foreground">歌曲信息</h3>
-        <div class="grid grid-cols-2 gap-4 text-sm text-muted-foreground">
-          <div>
-            <span class="text-primary-foreground">专辑：</span>
-            {{ songDetail.album }}
-          </div>
-          <div>
-            <span class="text-primary-foreground">发行时间：</span>
-            {{ formatDate(songDetail.releaseTime) }}
-          </div>
-        </div>
+  <div class="h-full flex flex-col overflow-hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+    <!-- 顶部选项卡切换 -->
+    <div class="flex items-center justify-between px-6 py-2.5 border-b border-slate-100 dark:border-slate-800 shrink-0">
+      <div class="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+        <!-- 歌词 Tab -->
+        <button
+          class="clean-nav-tab"
+          :class="{ 'clean-nav-tab-active': activeTab === 'lyrics' }"
+          @click="activeTab = 'lyrics'"
+        >
+          <Icon icon="solar:music-note-linear" class="text-base" />
+          <span>歌词</span>
+        </button>
+
+        <!-- 评论 Tab -->
+        <button
+          class="clean-nav-tab"
+          :class="{ 'clean-nav-tab-active': activeTab === 'comments' }"
+          @click="activeTab = 'comments'"
+        >
+          <Icon icon="solar:chat-round-linear" class="text-base" />
+          <span>评论</span>
+          <span
+            v-if="songDetail?.comments?.length"
+            class="text-[11px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 font-mono"
+          >
+            {{ songDetail.comments.length }}
+          </span>
+        </button>
+
+        <!-- 详情 Tab -->
+        <button
+          class="clean-nav-tab"
+          :class="{ 'clean-nav-tab-active': activeTab === 'info' }"
+          @click="activeTab = 'info'"
+        >
+          <Icon icon="solar:info-circle-linear" class="text-base" />
+          <span>详情</span>
+        </button>
       </div>
 
-      <!-- 评论区 -->
-      <div class="space-y-4">
-        <h3 class="text-xl font-semibold text-primary-foreground mt-12">评论（{{ formatNumber(songDetail.comments?.length || 0) }}）</h3>
-        
-        <!-- 评论输入框 -->
-        <div class="mb-4">
-          <div class="flex items-start gap-3">
-            <div class="flex-1">
-              <el-input
-                v-model="commentContent"
-                type="textarea"
-                :rows="4"
-                :maxlength="maxLength"
-                placeholder="说点什么吧"
-                resize="none"
-                show-word-limit
-              />
-              <div class="flex justify-end items-center mt-4">
-                <button @click="handleComment" :disabled="!commentContent.trim()"
-                  class="px-6 py-1.5 bg-primary text-white rounded-full text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors">
-                  发布
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 评论列表 -->
-        <div v-if="comments.length > 0" class="space-y-4">
-          <template v-for="comment in comments" :key="comment.commentId">
-            <div class="flex gap-3 group">
-              <div class="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 mt-0.5">
-                <img :src="comment.userAvatar || coverImg" alt="avatar" class="w-full h-full object-cover" />
-              </div>
-              <div class="flex-1">
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-medium text-blue-500">{{ comment.username }}</span>
-                </div>
-                <p class="text-sm mt-1 mb-2">{{ comment.content }}</p>
-                <div class="flex items-center justify-between text-sm text-gray-400">
-                  <span class="text-xs">{{ comment.createTime }}</span>
-                  <div class="flex items-center gap-4">
-                    <!-- 如果是用户自己的评论，显示删除按钮 -->
-                    <button v-if="comment.username === currentUsername"
-                      class="flex items-center gap-1 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                      @click="handleDelete(comment)"
-                    >
-                      <icon-material-symbols:delete-outline />
-                      <span>删除</span>
-                    </button>
-                    <button 
-                      class="flex items-center gap-1 hover:text-gray-600"
-                      @click="handleLike(comment)"
-                    >
-                      <span>{{ formatNumber(comment.likeCount) }}</span>
-                      <icon-material-symbols:thumb-up />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="border-b border-gray-300/70"></div>
-          </template>
-        </div>
-        <div v-else class="text-center py-8 text-gray-500">
-          <p>暂无评论，快来抢沙发吧~</p>
-        </div>
+      <!-- 歌曲专辑信息简标 -->
+      <div class="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 truncate max-w-[200px]">
+        <Icon icon="solar:album-linear" class="text-sm shrink-0" />
+        <span class="truncate">{{ songDetail?.album || currentTrack?.album || '单曲专辑' }}</span>
       </div>
     </div>
-    <div v-else class="flex items-center justify-center h-full">
-      <el-empty description="暂无歌曲信息" />
+
+    <!-- 主体区域切换 -->
+    <div class="flex-1 min-h-0 relative overflow-hidden">
+      <!-- Tab 1: 歌词视口 -->
+      <div v-show="activeTab === 'lyrics'" class="h-full">
+        <LyricView
+          :raw-lyric="songDetail?.lyric"
+          :song-title="songDetail?.songName || currentTrack.title"
+          :artist-name="songDetail?.artistName || currentTrack.artist"
+          :album-name="songDetail?.album || currentTrack.album"
+          :cover-url="songDetail?.coverUrl || currentTrack.cover"
+        />
+      </div>
+
+      <!-- Tab 2: 评论视口 -->
+      <div v-show="activeTab === 'comments'" class="h-full p-6 overflow-y-auto space-y-6">
+        <div class="space-y-6">
+          <!-- 评论输入卡片 -->
+          <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-3">
+            <el-input
+              v-model="commentContent"
+              type="textarea"
+              :rows="3"
+              :maxlength="maxLength"
+              placeholder="分享你此刻听歌的心情与故事…"
+              resize="none"
+              show-word-limit
+            />
+            <div class="flex items-center justify-between pt-1">
+              <span class="text-xs text-slate-400">畅所欲言，文明互动</span>
+              <button
+                @click="handleComment"
+                :disabled="!commentContent.trim()"
+                class="px-5 py-1.5 bg-primary hover:bg-blue-600 active:scale-95 text-white rounded-lg text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Icon icon="solar:plain-3-linear" class="text-sm" />
+                <span>发布评论</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 全部评论列表 -->
+          <div class="space-y-4">
+            <div class="flex items-center justify-between px-1">
+              <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <span>全部评论</span>
+                <span class="text-xs font-normal text-slate-400">({{ formatNumber(songDetail?.comments?.length || 0) }})</span>
+              </h3>
+            </div>
+
+            <!-- 评论列表项 -->
+            <div v-if="comments.length > 0" class="space-y-3">
+              <template v-for="comment in comments" :key="comment.commentId">
+                <div class="flex gap-3.5 p-3.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 border border-transparent hover:border-slate-200/60 dark:hover:border-slate-800 transition-all group">
+                  <div class="w-9 h-9 rounded-full overflow-hidden flex-shrink-0 border border-slate-200 dark:border-slate-700">
+                    <img :src="comment.userAvatar || coverImg" alt="avatar" class="w-full h-full object-cover" />
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-semibold text-slate-800 dark:text-slate-200">{{ comment.username }}</span>
+                      <span class="text-[11px] text-slate-400 font-mono">{{ comment.createTime }}</span>
+                    </div>
+                    <p class="text-xs text-slate-600 dark:text-slate-300 mt-1 mb-2 leading-relaxed break-words">{{ comment.content }}</p>
+                    <div class="flex items-center justify-end gap-3 text-xs text-slate-400">
+                      <!-- 当前用户本人的评论显示删除按钮 -->
+                      <button
+                        v-if="comment.username === currentUsername"
+                        class="flex items-center gap-1 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        @click="handleDelete(comment)"
+                      >
+                        <Icon icon="solar:trash-bin-trash-linear" class="text-sm" />
+                        <span>删除</span>
+                      </button>
+                      <button
+                        class="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer"
+                        @click="handleLike(comment)"
+                      >
+                        <Icon icon="solar:like-linear" class="text-sm" />
+                        <span>{{ formatNumber(comment.likeCount) }}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+            <div v-else class="text-center py-12 text-slate-400 text-xs space-y-2">
+              <Icon icon="solar:chat-round-linear" class="text-3xl mx-auto text-slate-300 dark:text-slate-600" />
+              <p>暂无评论，留下第一条足迹吧~</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: 歌曲详情 -->
+      <div v-show="activeTab === 'info'" class="h-full p-6 overflow-y-auto space-y-6">
+        <div class="space-y-4">
+          <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-200">歌曲详细信息</h3>
+          
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-1">
+              <span class="text-xs text-slate-400">歌曲名</span>
+              <p class="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{{ songDetail?.songName || currentTrack.title }}</p>
+            </div>
+
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-1">
+              <span class="text-xs text-slate-400">歌手</span>
+              <p class="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{{ songDetail?.artistName || currentTrack.artist }}</p>
+            </div>
+
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-1">
+              <span class="text-xs text-slate-400">所属专辑</span>
+              <p class="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{{ songDetail?.album || currentTrack.album || '单曲专辑' }}</p>
+            </div>
+
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-1">
+              <span class="text-xs text-slate-400">发行时间</span>
+              <p class="text-sm font-medium text-slate-800 dark:text-slate-200">{{ formatDate(songDetail?.releaseTime || '') }}</p>
+            </div>
+
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-1">
+              <span class="text-xs text-slate-400">歌曲时长</span>
+              <p class="text-sm font-medium text-slate-800 dark:text-slate-200 font-mono">{{ formatTime(duration || currentTrack.duration) }}</p>
+            </div>
+
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-1">
+              <span class="text-xs text-slate-400">音质</span>
+              <p class="text-sm font-medium text-primary font-medium">标准 / 无损高清音频</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.el-button {
-  --el-button-hover-text-color: var(--el-color-primary);
-  --el-button-hover-bg-color: transparent;
-}
-
-:deep(.el-input__wrapper) {
+.clean-nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
   border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-:deep(.el-textarea__inner) {
-  border-radius: 12px !important;
+:global(.dark) .clean-nav-tab {
+  color: #94a3b8;
+}
+
+.clean-nav-tab:hover {
+  color: #0f172a;
+}
+
+:global(.dark) .clean-nav-tab:hover {
+  color: #ffffff;
+}
+
+.clean-nav-tab-active {
+  background: #ffffff !important;
+  color: #2a68fa !important;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+:global(.dark) .clean-nav-tab-active {
+  background: #1e293b !important;
+  color: #60a5fa !important;
 }
 </style>

@@ -39,6 +39,7 @@ public class WebConfig implements WebMvcConfigurer { // ← 这里实现 WebMvc
                         "/artist/getAllArtists", "/artist/getArtistDetail/**",
                         "/song/getAllSongs", "/song/getRecommendedSongs",
                         "/song/getSongDetail/**",
+                        "/error",
                         "/test");
     }
 }
