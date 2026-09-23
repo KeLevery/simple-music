@@ -11,6 +11,7 @@ export const settingStore = defineStore({
     isOriginalParsed: true,
     isTranslatedParsed: true,
     isRomaParsed: true,
+    isCommentVisible: true,
     // 当前系统语言
     language: null,
   }),

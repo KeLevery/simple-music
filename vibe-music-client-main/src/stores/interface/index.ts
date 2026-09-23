@@ -43,6 +43,7 @@ export interface SettingState {
   isOriginalParsed: boolean // 是否解析原文
   isRomaParsed: boolean // 是否解析罗马音
   isTranslatedParsed: boolean // 是否解析翻译
+  isCommentVisible: boolean // 是否显示评论区
   language: string | null // 当前系统语言
 }
 

@@ -6,19 +6,24 @@ interface Props {
   coverUrl?: string
   songTitle?: string
   isPlaying: boolean
+  isExpanded?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   coverUrl: '',
   songTitle: '',
   isPlaying: false,
+  isExpanded: false,
 })
 
 const displayCover = computed(() => props.coverUrl || defaultCover)
 </script>
 
 <template>
-  <div class="relative w-full max-w-[340px] aspect-square flex items-center justify-center select-none my-2">
+  <div
+    class="relative w-full max-w-[340px] aspect-square flex items-center justify-center select-none transition-all duration-500 ease-out origin-center"
+    :class="isExpanded ? 'scale-115 sm:scale-120 md:scale-125 lg:scale-130 my-4 sm:my-6' : 'my-2'"
+  >
     <!-- 背景柔光光晕 (Ambient Disc Glow) -->
     <div
       class="absolute inset-4 rounded-full filter blur-2xl opacity-40 dark:opacity-30 transition-all duration-700 pointer-events-none scale-105"

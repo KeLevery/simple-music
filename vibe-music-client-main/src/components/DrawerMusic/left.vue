@@ -12,6 +12,14 @@ import { AudioStore } from '@/stores/modules/audio'
 import { collectSong, cancelCollectSong } from '@/api/system'
 import { ElMessage } from 'element-plus'
 
+interface Props {
+  isExpanded?: boolean
+}
+
+withDefaults(defineProps<Props>(), {
+  isExpanded: false,
+})
+
 const {
   currentTrack,
   isPlaying,
@@ -161,7 +169,10 @@ const handleLike = async () => {
 </script>
 
 <template>
-  <div class="w-full max-w-md flex flex-col items-center justify-center select-none py-1">
+  <div
+    class="w-full flex flex-col items-center justify-center select-none py-1 transition-all duration-500 ease-in-out"
+    :class="isExpanded ? 'max-w-lg lg:max-w-xl' : 'max-w-md'"
+  >
     <!-- 视觉呈现模式切换控制条 -->
     <div class="flex items-center gap-1.5 mb-2 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-800">
       <button
@@ -194,7 +205,10 @@ const handleLike = async () => {
     </div>
 
     <!-- 核心视觉组件呈现 (黑胶唱盘 or 封面画报) -->
-    <div class="w-full flex items-center justify-center min-h-[300px] sm:min-h-[340px]">
+    <div
+      class="w-full flex items-center justify-center transition-all duration-500 ease-out"
+      :class="isExpanded ? 'min-h-[350px] sm:min-h-[390px] lg:min-h-[430px]' : 'min-h-[300px] sm:min-h-[340px]'"
+    >
       <Transition name="fade-scale" mode="out-in">
         <VinylPlayer
           v-if="visualMode === 'vinyl'"
@@ -202,6 +216,7 @@ const handleLike = async () => {
           :cover-url="songDetail?.coverUrl || currentTrack.cover"
           :song-title="songDetail?.songName || currentTrack.title"
           :is-playing="isPlaying"
+          :is-expanded="isExpanded"
         />
         <AlbumArtwork
           v-else
@@ -209,16 +224,23 @@ const handleLike = async () => {
           :cover-url="songDetail?.coverUrl || currentTrack.cover"
           :song-title="songDetail?.songName || currentTrack.title"
           :is-playing="isPlaying"
+          :is-expanded="isExpanded"
         />
       </Transition>
     </div>
 
     <!-- 歌曲标题与歌手 -->
-    <div class="flex flex-col items-center text-center mt-3 w-full px-4">
-      <h1 class="text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white truncate max-w-full tracking-tight">
+    <div class="flex flex-col items-center text-center mt-3 w-full px-4 transition-all duration-300">
+      <h1
+        class="font-bold text-slate-900 dark:text-white truncate max-w-full tracking-tight transition-all duration-300"
+        :class="isExpanded ? 'text-2xl sm:text-3xl lg:text-4xl' : 'text-2xl lg:text-3xl'"
+      >
         {{ songDetail?.songName || currentTrack.title }}
       </h1>
-      <p class="text-sm lg:text-base text-slate-500 dark:text-slate-400 mt-1 truncate max-w-full font-medium">
+      <p
+        class="text-slate-500 dark:text-slate-400 mt-1 truncate max-w-full font-medium transition-all duration-300"
+        :class="isExpanded ? 'text-base sm:text-lg' : 'text-sm lg:text-base'"
+      >
         {{ songDetail?.artistName || currentTrack.artist }}
         <span v-if="songDetail?.album || currentTrack.album" class="text-slate-300 dark:text-slate-600 mx-1.5">·</span>
         <span v-if="songDetail?.album || currentTrack.album">{{ songDetail?.album || currentTrack.album }}</span>

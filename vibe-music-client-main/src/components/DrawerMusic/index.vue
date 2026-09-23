@@ -2,8 +2,7 @@
 import Left from './left.vue'
 import Right from './right.vue'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal.vue'
-import { useDark, useToggle } from '@vueuse/core'
-import { useDateFormat, useNow } from '@vueuse/core'
+import { useDark, useToggle, useDateFormat, useNow, useLocalStorage } from '@vueuse/core'
 import { getSongDetail, collectSong, cancelCollectSong } from '@/api/system'
 import type { SongDetail } from '@/api/interface'
 import { ref, provide, watch, onMounted, onUnmounted } from 'vue'
@@ -20,6 +19,13 @@ const audioStore = AudioStore()
 const userStore = UserStore()
 const showDrawer = defineModel<boolean>()
 const songDetail = ref<SongDetail | null>(null)
+
+// 控制右侧面板显隐（持久化存储）
+const isRightPanelVisible = useLocalStorage('music-drawer-right-panel-visible', true)
+
+const toggleRightPanel = () => {
+  isRightPanelVisible.value = !isRightPanelVisible.value
+}
 
 // 快捷键帮助弹窗
 const showShortcutsModal = ref(false)
@@ -179,6 +185,10 @@ const onKeydown = (e: KeyboardEvent) => {
       e.preventDefault()
       prevTrack()
       break
+    case 'KeyH':
+      e.preventDefault()
+      toggleRightPanel()
+      break
   }
 }
 
@@ -241,7 +251,7 @@ provide('songDetail', songDetail)
           </div>
         </div>
 
-        <!-- 右侧：快捷键指南、沉浸全屏、时钟、主题切换与关闭 -->
+        <!-- 右侧：快捷键指南、右栏显隐、沉浸全屏、时钟、主题切换与关闭 -->
         <div class="flex items-center gap-2.5">
           <!-- 快捷键指南 -->
           <button
@@ -250,6 +260,16 @@ provide('songDetail', songDetail)
             title="快捷键指南"
           >
             <Icon icon="solar:keyboard-linear" class="text-base" />
+          </button>
+
+          <!-- 侧边栏/右侧面板显隐切换 -->
+          <button
+            @click="toggleRightPanel"
+            class="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer"
+            :class="{ '!bg-blue-50 dark:!bg-blue-950/40 text-primary border-primary/30': !isRightPanelVisible }"
+            :title="isRightPanelVisible ? '隐藏右侧面板 / 铺满全屏 (H)' : '展开右侧面板 (H)'"
+          >
+            <Icon :icon="isRightPanelVisible ? 'solar:sidebar-minimalistic-linear' : 'solar:sidebar-minimalistic-bold'" class="text-base" />
           </button>
 
           <!-- 全屏沉浸切换 -->
@@ -290,15 +310,38 @@ provide('songDetail', songDetail)
       <!-- 主体双栏布局 -->
       <main class="flex-1 min-h-0 w-full flex flex-col lg:flex-row p-4 lg:p-6 gap-6 overflow-hidden relative z-10">
         <!-- 左侧：黑胶/画报与控制区 -->
-        <section class="w-full lg:w-[46%] h-full flex flex-col justify-center items-center overflow-y-auto lg:overflow-visible">
-          <Left />
+        <section
+          class="h-full flex flex-col justify-center items-center overflow-y-auto lg:overflow-visible transition-all duration-500 ease-in-out"
+          :class="isRightPanelVisible ? 'w-full lg:w-[46%]' : 'w-full flex-1 max-w-4xl mx-auto'"
+        >
+          <Left :is-expanded="!isRightPanelVisible" />
         </section>
 
         <!-- 右侧：歌词与评论卡片 -->
-        <section class="w-full lg:w-[54%] h-full flex flex-col min-h-0">
-          <Right />
-        </section>
+        <Transition name="panel-slide">
+          <section
+            v-if="isRightPanelVisible"
+            class="w-full lg:w-[54%] h-full flex flex-col min-h-0 transition-all duration-500 ease-in-out"
+          >
+            <Right @hide="isRightPanelVisible = false" />
+          </section>
+        </Transition>
       </main>
+
+      <!-- 右侧面板展开浮动按钮 (当右侧面板隐藏时浮现在右边缘) -->
+      <Transition name="fade-slide">
+        <button
+          v-if="!isRightPanelVisible"
+          class="fixed right-0 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-2 py-4 px-2 rounded-l-2xl bg-white/90 dark:bg-slate-900/90 hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-primary shadow-xl border border-r-0 border-slate-200/80 dark:border-slate-800 backdrop-blur-md transition-all duration-300 hover:pl-3 group cursor-pointer"
+          @click="isRightPanelVisible = true"
+          title="展开歌词与评论面板 (H)"
+        >
+          <Icon icon="solar:alt-arrow-left-linear" class="text-base group-hover:-translate-x-0.5 transition-transform" />
+          <div class="flex flex-col items-center gap-0.5 text-[11px] font-medium [writing-mode:vertical-lr] tracking-widest text-slate-500 dark:text-slate-400 group-hover:text-primary">
+            <span>歌词与评论</span>
+          </div>
+        </button>
+      </Transition>
     </div>
 
     <!-- 快捷键指南弹窗 -->
@@ -319,5 +362,31 @@ provide('songDetail', songDetail)
 .drawer-clean-theme-wrapper .el-drawer__body {
   padding: 0 !important;
   overflow: hidden !important;
+}
+
+.panel-slide-enter-active,
+.panel-slide-leave-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.panel-slide-enter-from,
+.panel-slide-leave-to {
+  opacity: 0;
+  transform: translateX(60px);
+  width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translate(100%, -50%);
 }
 </style>

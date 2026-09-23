@@ -18,6 +18,7 @@ const shortcuts = [
   { key: '↑ / ↓', desc: '增加 / 减小音量 5%' },
   { key: 'M', desc: '一键静音 / 取消静音' },
   { key: 'F', desc: '切换全屏沉浸模式' },
+  { key: 'H', desc: '隐藏 / 显示右侧面板 (全屏唱片)' },
   { key: 'L', desc: '将当前歌曲加入/取消喜欢' },
   { key: 'N', desc: '切换至下一首歌曲' },
   { key: 'P', desc: '切换至上一首歌曲' },

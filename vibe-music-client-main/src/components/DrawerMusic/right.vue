@@ -1,21 +1,47 @@
 <script setup lang="ts">
 import type { SongDetail } from '@/api/interface'
-import { ref, inject, type Ref, computed } from 'vue'
+import { ref, inject, type Ref, computed, watch } from 'vue'
 import { formatNumber, formatTime } from '@/utils'
 import coverImg from '@/assets/cover.png'
 import { likeComment, addSongComment, getSongDetail, deleteComment } from '@/api/system'
 import { ElMessage } from 'element-plus'
 import { UserStore } from '@/stores/modules/user'
+import { settingStore } from '@/stores/modules/setting'
 import { useAudioPlayer } from '@/hooks/useAudioPlayer'
 import LyricView from './LyricView.vue'
 import { Icon } from '@iconify/vue'
 
 const songDetail = inject<Ref<SongDetail | null>>('songDetail')
 const userStore = UserStore()
+const setting = settingStore()
 const { currentTrack, duration } = useAudioPlayer()
 
 // Tab 切换：歌词 (lyrics) 与 评论 (comments) 与 歌曲档案 (info)
 const activeTab = ref<'lyrics' | 'comments' | 'info'>('lyrics')
+
+const emit = defineEmits<{
+  (e: 'hide'): void
+}>()
+
+// 切换评论区显隐
+const toggleCommentVisibility = () => {
+  const nextVisible = !setting.isCommentVisible
+  setting.setSettingState('isCommentVisible', nextVisible)
+  if (!nextVisible && activeTab.value === 'comments') {
+    activeTab.value = 'lyrics'
+  }
+}
+
+// 监听评论显隐状态，评论隐藏时若当前处在评论 Tab 则立即切换至歌词 Tab
+watch(
+  () => setting.isCommentVisible,
+  (visible) => {
+    if (!visible && activeTab.value === 'comments') {
+      activeTab.value = 'lyrics'
+    }
+  },
+  { immediate: true }
+)
 
 // 获取当前用户名
 const currentUsername = computed(() => userStore.userInfo?.username || '')
@@ -136,48 +162,84 @@ const handleDelete = async (comment: any) => {
   <div class="h-full flex flex-col overflow-hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
     <!-- 顶部选项卡切换 -->
     <div class="flex items-center justify-between px-6 py-2.5 border-b border-slate-100 dark:border-slate-800 shrink-0">
-      <div class="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
-        <!-- 歌词 Tab -->
-        <button
-          class="clean-nav-tab"
-          :class="{ 'clean-nav-tab-active': activeTab === 'lyrics' }"
-          @click="activeTab = 'lyrics'"
-        >
-          <Icon icon="solar:music-note-linear" class="text-base" />
-          <span>歌词</span>
-        </button>
-
-        <!-- 评论 Tab -->
-        <button
-          class="clean-nav-tab"
-          :class="{ 'clean-nav-tab-active': activeTab === 'comments' }"
-          @click="activeTab = 'comments'"
-        >
-          <Icon icon="solar:chat-round-linear" class="text-base" />
-          <span>评论</span>
-          <span
-            v-if="songDetail?.comments?.length"
-            class="text-[11px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 font-mono"
+      <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+          <!-- 歌词 Tab -->
+          <button
+            class="clean-nav-tab"
+            :class="{ 'clean-nav-tab-active': activeTab === 'lyrics' }"
+            @click="activeTab = 'lyrics'"
           >
-            {{ songDetail.comments.length }}
-          </span>
-        </button>
+            <Icon icon="solar:music-note-linear" class="text-base" />
+            <span>歌词</span>
+          </button>
 
-        <!-- 详情 Tab -->
-        <button
-          class="clean-nav-tab"
-          :class="{ 'clean-nav-tab-active': activeTab === 'info' }"
-          @click="activeTab = 'info'"
+          <!-- 评论 Tab -->
+          <button
+            v-if="setting.isCommentVisible"
+            class="clean-nav-tab"
+            :class="{ 'clean-nav-tab-active': activeTab === 'comments' }"
+            @click="activeTab = 'comments'"
+          >
+            <Icon icon="solar:chat-round-linear" class="text-base" />
+            <span>评论</span>
+            <span
+              v-if="songDetail?.comments?.length"
+              class="text-[11px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 font-mono"
+            >
+              {{ songDetail.comments.length }}
+            </span>
+          </button>
+
+          <!-- 详情 Tab -->
+          <button
+            class="clean-nav-tab"
+            :class="{ 'clean-nav-tab-active': activeTab === 'info' }"
+            @click="activeTab = 'info'"
+          >
+            <Icon icon="solar:info-circle-linear" class="text-base" />
+            <span>详情</span>
+          </button>
+        </div>
+
+        <!-- 评论显隐切换按钮 -->
+        <el-tooltip
+          :content="setting.isCommentVisible ? '隐藏评论区' : '显示评论区'"
+          placement="top"
+          effect="dark"
         >
-          <Icon icon="solar:info-circle-linear" class="text-base" />
-          <span>详情</span>
-        </button>
+          <button
+            class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors border border-transparent hover:border-slate-200/80 dark:hover:border-slate-700 cursor-pointer flex items-center justify-center"
+            :title="setting.isCommentVisible ? '隐藏评论区' : '显示评论区'"
+            @click="toggleCommentVisibility"
+          >
+            <Icon
+              :icon="setting.isCommentVisible ? 'solar:eye-closed-linear' : 'solar:chat-round-linear'"
+              class="text-base"
+            />
+          </button>
+        </el-tooltip>
       </div>
 
-      <!-- 歌曲专辑信息简标 -->
-      <div class="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 truncate max-w-[200px]">
-        <Icon icon="solar:album-linear" class="text-sm shrink-0" />
-        <span class="truncate">{{ songDetail?.album || currentTrack?.album || '单曲专辑' }}</span>
+      <div class="flex items-center gap-2.5">
+        <!-- 歌曲专辑信息简标 -->
+        <div class="hidden md:flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 truncate max-w-[160px]">
+          <Icon icon="solar:album-linear" class="text-sm shrink-0" />
+          <span class="truncate">{{ songDetail?.album || currentTrack?.album || '单曲专辑' }}</span>
+        </div>
+
+        <!-- 隐藏面板按钮 -->
+        <el-tooltip content="隐藏右侧面板 (唱片铺满全屏)" placement="top" effect="dark">
+          <button
+            class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all border border-slate-200/80 dark:border-slate-700 text-xs font-medium cursor-pointer"
+            @click="emit('hide')"
+            title="隐藏右侧面板"
+          >
+            <Icon icon="solar:sidebar-minimalistic-linear" class="text-sm" />
+            <span class="hidden sm:inline">隐藏</span>
+            <Icon icon="solar:alt-arrow-right-linear" class="text-xs" />
+          </button>
+        </el-tooltip>
       </div>
     </div>
 
@@ -195,7 +257,7 @@ const handleDelete = async (comment: any) => {
       </div>
 
       <!-- Tab 2: 评论视口 -->
-      <div v-show="activeTab === 'comments'" class="h-full p-6 overflow-y-auto space-y-6">
+      <div v-if="setting.isCommentVisible" v-show="activeTab === 'comments'" class="h-full p-6 overflow-y-auto space-y-6">
         <div class="space-y-6">
           <!-- 评论输入卡片 -->
           <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-3">
